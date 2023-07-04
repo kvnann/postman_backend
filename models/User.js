@@ -37,6 +37,10 @@ const userSchema = mongoose.Schema({
         type:Array,
         required:false,
         default:[]
+    },
+    profilePhoto: {
+        type: Buffer,
+        required:false
     }
 });
 

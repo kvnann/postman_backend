@@ -1,15 +1,19 @@
 const express = require('express');
 const router = express.Router();
-const jwt = require('jsonwebtoken');
-const auth = require('../middleware/jwt');
-const User = require("../models/User");
-const helpers = require('../lib/helpers');
-const handlers = require('../lib/handlers');
+
 const userController = require('../controllers/userController');
+
+const auth = require('../middleware/jwt');
+
+const handlers = require('../lib/handlers');
+
+const multer = require("multer");
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
 
 router.post('/login', userController.login);
 
-router.post('/register',userController.register);
+router.post('/register', upload.single('image'),userController.register);
 
 router.post('/search', auth,  (req,res)=>{
     handlers.search(req,res);

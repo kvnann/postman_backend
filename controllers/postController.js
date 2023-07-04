@@ -5,6 +5,69 @@ const User = require('../models/User');
 
 const postController = {};
 
+postController.create = async(req,res)=>{
+    let {text} = req.body;
+    text = typeof(text) == 'string' && text.trim().length >= 0 && text.trim().length <= 5000 ? text.trim() : false;
+
+    if(!text || !req.user.userID){
+        return res.status(500).send({message:"Missing field(s)"});
+    }
+    
+    
+    let userData = await User.findOne({userID:req.user.userID}).catch(error=>{
+        return res.status(401).send({message:`Error occured: ${error}`});
+    });
+    
+    if(!userData){
+        return res.status(401).send({message:"User not found"});
+    }
+
+    let postID = helpers.randomString(20);
+
+    let existingPostID = await Post.find({postID});
+
+    existingPostID = existingPostID.length > 0
+
+    if(existingPostID){
+        while(existingPostID){
+            postID = helpers.randomString(20);
+            existingPostID = await Post.find({postID});
+            existingPostID = existingPostID.length > 0;
+        }
+    }
+
+    const publishDate = new Date();
+    const admin = userData.admin;
+
+
+
+    const post = new Post({
+        postID,
+        user:{userID: userData.userID},
+        publishDate,
+        text,
+        admin
+        });
+
+    await post.save().then(postCreated=>{
+        userData.posts.unshift(postID);
+        userData.posts = helpers.sortByPublishDate(userData.posts)
+        // userData.feed.unshift(post);
+        handlers.user.update(userData.userID,{posts:userData.posts},(err,updatedUser)=>{
+            if(!err && updatedUser){
+                return res.status(200).send(postCreated);
+            }
+            else{
+                return res.status(500).send({message:err});
+            }
+        });
+    }).catch(error=>{
+        res.status(500).send({
+            message:`An error occured while posting ${error}`
+        });
+    });
+}
+
 postController.like = async(req,res)=>{
     try{
         let {postID, state} = req.body;
@@ -87,11 +150,30 @@ postController.loadPosts = async(req,res)=>{
     let allPosts = []
     await selectedPosts.forEach(async(postID) => {
         errors[`${postID}`] = {}
-        await Post.find({postID}).then(postData=>{
-            if(postData.length<1){
+        await Post.findOne({postID}).then(async(postData)=>{
+            if(!postData){
                 errors[`${postID}`].message = "Post could not be found";
             }
-            allPosts.push(postData[0]);
+
+            try{
+                const userData = await User.findOne({userID:postData.user.userID});
+                if(!userData){
+                    errors[`${postID}`].message = "Couldn't find user"
+                    return;
+                }
+                delete userData.password;
+                userData.password = null;
+
+                postData.user = {
+                    userID:userData.userID,
+                    username:userData.username,
+                    profilePhoto: userData?.profilePhoto
+                }
+            }catch(error){  
+                errors[`${postID}`].message = error
+            }
+
+            allPosts.push(postData);
             if(allPosts.length === selectedPosts.length){
                 allPosts = helpers.sortByPublishDate(allPosts);
                 allPosts.forEach(sortedPost=>{
@@ -100,70 +182,10 @@ postController.loadPosts = async(req,res)=>{
                 return res.status(200).send({posts,errors});
             }
         }).catch(e=>{
-            errors[`${postID}`].message = "Couldn't find user";
+            errors[`${postID}`].message = "Couldn't find post";
         });
     });
 };
-
-postController.create = async(req,res)=>{
-    let {text} = req.body;
-    text = typeof(text) == 'string' && text.trim().length >= 0 && text.trim().length <= 5000 ? text.trim() : false;
-
-    if(!text || !req.user.userID){
-        return res.status(500).send({message:"Missing field(s)"});
-    }
-    
-    
-    let userData = await User.findOne({userID:req.user.userID}).catch(error=>{
-        return res.status(401).send({message:`Error occured: ${error}`});
-    });
-    
-    if(!userData){
-        return res.status(401).send({message:"User not found"});
-    }
-
-    let postID = helpers.randomString(20);
-
-    let existingPostID = await Post.find({postID});
-
-    existingPostID = existingPostID.length > 0
-
-    if(existingPostID){
-        while(existingPostID){
-            postID = helpers.randomString(20);
-            existingPostID = await Post.find({postID});
-            existingPostID = existingPostID.length > 0;
-        }
-    }
-
-    const publishDate = new Date();
-    const admin = userData.admin;
-    const postUser = {
-        userID: userData.userID,
-        username: userData.username,
-        admin
-    }
-
-    const post = new Post({postID,user:postUser,publishDate,text,admin});
-
-    await post.save().then(postCreated=>{
-        userData.posts.unshift(postID);
-        userData.posts = helpers.sortByPublishDate(userData.posts)
-        // userData.feed.unshift(post);
-        handlers.user.update(userData.userID,{posts:userData.posts},(err,updatedUser)=>{
-            if(!err && updatedUser){
-                return res.status(200).send(postCreated);
-            }
-            else{
-                return res.status(500).send({message:err});
-            }
-        });
-    }).catch(error=>{
-        res.status(500).send({
-            message:`An error occured while posting ${error}`
-        });
-    });
-}
 
 postController.userPosts = async(req,res)=>{
     try {
@@ -259,11 +281,11 @@ postController.getOne = async(req,res)=>{
     if(!postID){
         return res.status(400).send({message:"Missing required fields"});
     }
-    await Post.find({postID}).then(postData=>{
-        if(postData.length<1){
+    await Post.findOne({postID}).then(postData=>{
+        if(!postData){
             return res.status(400).send({message:"Post could not be found"});
         }
-        return res.status(200).send(postData[0]);
+        return res.status(200).send(postData);
     }).catch(e=>{
         res.status(400).send({message:"An error occured :("});
     });
@@ -281,11 +303,28 @@ postController.getPosts = async(req,res)=>{
 
     await postsID.forEach(async(postID) => {
         errors[`${postID}`] = {}
-        await Post.find({postID}).then(postData=>{
-            if(postData.length<1){
+        await Post.findOne({postID}).then(async(postData)=>{
+            if(!postData){
                 errors[`${postID}`].message = "Post could not be found";
             }
-            posts[`${postID}`] = postData[0];
+            try{
+                const userData = await User.findOne({userID:postData.user.userID});
+                if(!userData){
+                    errors[`${postID}`].message = "Couldn't find user"
+                    return;
+                }
+                delete userData.password;
+                userData.password = null;
+
+                postData.user = {
+                    userID:userData.userID,
+                    username:userData.username,
+                    profilePhoto: userData?.profilePhoto
+                }
+            }catch(error){  
+                errors[`${postID}`].message = error
+            }
+            posts[`${postID}`] = postData;
             postCount++
             if(postCount === postsID.length){
                 return res.status(200).send({posts,errors});

@@ -35,12 +35,19 @@ userController.login = async(req,res)=>{
 
 userController.register = async(req,res)=>{
     let {username,email,password} = req.body;
+    const imageBuffer = req?.file?.buffer;
+
+    
     username = typeof(username) == 'string' && username.length >= 3 ? username : false;
     password = typeof(password) == 'string' && password.length >= 4 ? password : false;
     email = helpers.isValidEmail(email) ? email : false; 
-
+    
     if(!username || !password || !email){
         return res.status(500).send({message:"Missing field(s)"});
+    }
+
+    if(!imageBuffer){
+        imageBuffer = ""
     }
     
     const userID = helpers.randomString(20);
@@ -76,7 +83,7 @@ userController.register = async(req,res)=>{
 
     const hashedPass = helpers.hash(password);
 
-    const user = new User({userID,username,email,password:hashedPass});
+    const user = new User({userID,username,email,password:hashedPass, profilePhoto:imageBuffer});
 
     await user.save().then(userCreated=>{
         const accessToken = jwt.sign({userID}, process.env.ACCESS_TOKEN_SECRET, {
@@ -101,6 +108,9 @@ userController.auth = async(req,res)=>{
     }
     userData.password = null;
     // delete userData.password;
+    // const profilePhoto = userData?.profilePhoto.toString('base64');
+    // const convertedData = `/${Buffer.from(userData.profilePhoto, 'base64').toString('base64')}`;
+    // userData.profilePhoto = convertedData;
     res.status(200).send({
         userData:userData,
         newAccessToken: req.newAuth?req.newAccessToken:false,
@@ -122,6 +132,7 @@ userController.getOne = async(req,res)=>{
         }
         userData.password = null;
         delete userData.password;
+        userData.profilePhoto = userData?.profilePhoto.toString('base64');
         authUser = userData;
     }).catch(e=>{
         res.status(400).send({message:"Couldn't find user"});
@@ -134,6 +145,7 @@ userController.getOne = async(req,res)=>{
             }
             watchingUserData.password = null;
             delete watchingUserData.password;
+            watchingUserData.profilePhoto = watchingUserData?.profilePhoto.toString('base64');
             return res.status(200).send({
                 watchingUserData,
                 userData:authUser,
@@ -151,6 +163,7 @@ userController.getOne = async(req,res)=>{
             }
             watchingUserData.password = null;
             delete watchingUserData.password;
+            watchingUserData.profilePhoto = watchingUserData?.profilePhoto.toString('base64');
             return res.status(200).send({
                 watchingUserData,
                 userData:authUser,
@@ -183,13 +196,16 @@ userController.getUsers = async(req,res)=>{
             }
             userData.password = null;
             // delete userData.password;
+            if(userData.profilePhoto){
+                userData.profilePhoto = userData.profilePhoto.toString('base64');
+            }
             users[`${userID}`] = userData[0];
             userCount++
             if(userCount === usersID.length){
                 return res.status(200).send({users,errors});
             }
         }).catch(e=>{
-            errors[`${userID}`].message = "Couldn't find user";
+            errors[`${userID}`].message = "Couldn't find user" + e;
         });
     });
 }
