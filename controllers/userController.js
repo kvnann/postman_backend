@@ -35,7 +35,7 @@ userController.login = async(req,res)=>{
 
 userController.register = async(req,res)=>{
     let {username,email,password} = req.body;
-    const imageBuffer = req?.file?.buffer;
+    let imageBuffer = req?.file?.buffer;
 
     
     username = typeof(username) == 'string' && username.length >= 3 ? username : false;
