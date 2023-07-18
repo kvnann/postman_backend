@@ -31,7 +31,7 @@ const postSchema = mongoose.Schema({
         type: Array,
         required: false,
         default: []
-    }
+    },
 });
 
 const Post = mongoose.model('Post', postSchema);

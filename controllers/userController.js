@@ -1,10 +1,17 @@
 const userController = {}
 const helpers = require('../lib/helpers');
 const handlers = require('../lib/handlers');
-const User = require("../models/User")
+const User = require("../models/User");
 const jwt = require("jsonwebtoken");
+const {validationResult} = require("express-validator");
 
 userController.login = async(req,res)=>{
+
+    // const errors = validationResult(req);
+    // if(!errors.isEmpty()){
+    //     return res.status(400).send({errors:errors.array()})
+    // }
+
     const {username,password} = req.body;
 
     if(!username || !password){
@@ -34,6 +41,12 @@ userController.login = async(req,res)=>{
 }
 
 userController.register = async(req,res)=>{
+
+    // const errors = validationResult(req);
+    // if(!errors.isEmpty()){
+    //     return res.status(400).send({errors:errors.array()})
+    // }
+
     let {username,email,password} = req.body;
     let imageBuffer = req?.file?.buffer;
 
@@ -212,13 +225,61 @@ userController.getUsers = async(req,res)=>{
 
 userController.update = async(req,res)=>{
     const userID = req.body.userID;
-    const updateData = req.body.userData;
-  
+    const {username, email} = req.body;
+
+    let updateData = {}
+
+    if(username){
+        if(username.length >= 3){
+            updateData.username = username;
+        }
+        else{
+            return res.status(400).send({message:"Username length should be minimum 3"});
+        }
+    }
+
+    if(email){
+        if(helpers.isValidEmail(email)){
+            updateData.email = email;
+        }
+        else{
+            return res.status(400).send({message:"Please provide a valid email"});
+        }
+    }
+    
+    if(req?.file?.buffer){
+        updateData.profilePhoto = req?.file?.buffer
+    }
+
     if (!userID) {
       return res.status(400).send({ message: "Missing required fields" });
     }
+
+    let existingUsername = await User.findOne({username});
+
+    if(existingUsername){
+        return res.status(400).send({message:"This username is already taken"});
+    }
+
+    let existingEmail = await User.findOne({email});
+
+    if(existingEmail){
+        return res.status(400).send({message:"This email is already in use"});
+    }
   
     try {
+
+      if(req.user.userID !== req.body.userID){
+        return res.status(401).send({});
+      }
+      
+      if(updateData.username && updateData.username.length < 3){
+        return res.status(400).send({message:""});
+      }
+      if(updateData.password && updateData.password.length < 4){
+        return res.status(400).send({message:""});
+      }
+        
       const userData = await User.findOneAndUpdate(
         { userID },
         { $set: updateData },

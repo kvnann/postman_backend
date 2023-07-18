@@ -2,10 +2,18 @@ const helpers = require('../lib/helpers');
 const handlers = require('../lib/handlers');
 const Post = require('../models/Post');
 const User = require('../models/User');
+const Comment = require('../models/Comment');
+// const {validationResult} = require("express-validator");
 
 const postController = {};
 
 postController.create = async(req,res)=>{
+
+    // const errors = validationResult(req);
+    // if(!errors.isEmpty()){
+    //     return res.status(400).send({errors:errors.array()})
+    // }
+
     let {text} = req.body;
     text = typeof(text) == 'string' && text.trim().length >= 0 && text.trim().length <= 5000 ? text.trim() : false;
 
@@ -186,6 +194,199 @@ postController.loadPosts = async(req,res)=>{
         });
     });
 };
+
+postController.loadComments = async(req,res)=>{
+    // const userID = req.user.userID;
+    const {postID} = req.body;
+    let part = req.body.part;
+
+    let postData;
+
+    try{
+        postData = await Post.findOne({postID});
+    }
+    catch(e){
+        return res.status(404).send({message:"Couldn't find post"});
+    }
+
+
+    let commentsID = postData?.comments;
+
+
+
+    if(!commentsID || commentsID?.length < 1){
+        return res.status(400).send({message:"No comments found"});
+    }
+
+    try{
+        part = parseInt(part,10)
+    }
+    catch(e){
+        return res.status(400).send({message:"Please provide a valid part number"});
+    }
+
+    let commentsData = await Comment.find({commentID:{$in:commentsID}})
+
+
+    let array3x3 = helpers.convertTo3x3Array(commentsData);
+
+    if(part>array3x3.length){
+        return res.status(400).send({message:"Can't load more posts"});
+    }
+
+    const selectedComments = array3x3[part-1];
+
+    if(!selectedComments || selectedComments?.length < 1){
+        return res.status(400).send({message:"No comments found"});
+    }
+
+    res.status(200).send(selectedComments.reverse());
+    
+};
+
+postController.addComment = async(req,res)=>{
+    const {postID, text, userID} = req.body;
+    
+    if(!postID || !userID || typeof(text) !== "string" || text.trim().length < 1){
+        return res.status(400).send({message:"Invalid request. Maybe you didn't provide any text"});
+    }
+    
+    if(userID !== req?.user?.userID){
+        return res.status(401).send();
+    }
+
+    let userData;
+
+    try{
+        userData = await User.findOne({userID});
+        if(!userData){
+            return res.status(500).send({message:"Error occured while finding user"});
+        }
+    }catch(err){
+        return res.status(500).send({message:"Error occured while finding user" + err});
+    }
+
+    let postData;
+
+    try{
+        postData = await Post.findOne({postID});
+        if(!postData){
+            return res.status(500).send({message:"Error occured while finding relevant post"});
+        }
+    }catch(err){
+        return res.status(500).send({message:"Error occured while finding relevant post" + err});
+    }
+
+    let commentID = helpers.randomString(20);
+
+    let newComments = [...postData.comments , commentID];
+
+    try{
+        handlers.post.update(postData.postID,{comments:newComments},(err,updatedPost)=>{
+            if(!err && updatedPost){
+                const newComment = new Comment(
+                    {
+                        commentID,
+                        postID,
+                        text,
+                        publishDate:new Date(),
+                        userData:{
+                            userID,
+                            username:userData.username
+                        },
+                        profilePhoto:userData.profilePhoto,
+                        likes:[]
+                    }
+                );
+
+                newComment.save().then(commentCreated=>{
+                    if(commentCreated){
+                        return res.status(200).send(commentCreated);
+                    }   
+                }).catch(err=>{
+                    return res.status(500).send({message:"Couldn't cave comment to database"});
+                });
+            }
+            else{
+                return res.status(500).send({message:err});
+            }
+        });
+
+
+    } catch(e){
+        res.status(500).send({message:e});
+    }
+}
+
+postController.deleteComment = async(req,res)=>{
+    const {commentID} = req.body;
+    
+    if(!commentID){
+        return res.status(400).send({message:"Invalid request. Try again"});
+    }
+
+    let commentData;
+
+    try{
+        commentData = await Comment.findOne({commentID});
+        if(!commentData){
+            return res.status(500).send({message:"Error occured while finding user"});
+        }
+    }catch(err){
+        return res.status(500).send({message:"Error occured while finding user" + err});
+    }
+
+    let userData;
+
+    try{
+        userData = await User.findOne({userID:req.user.userID});
+        if(!userData){
+            return res.status(500).send({message:"Error occured while finding user"});
+        }
+    }catch(err){
+        return res.status(500).send({message:"Error occured while finding user" + err});
+    }
+
+    
+    if(commentData.userData.userID !== req?.user?.userID && !userData.admin){
+        return res.status(401).send();
+    }
+
+    let postData;
+
+    try{
+        postData = await Post.findOne({postID:commentData.postID});
+        if(!postData){
+            return res.status(500).send({message:"Error occured while finding relevant post"});
+        }
+    }catch(err){
+        return res.status(500).send({message:"Error occured while finding relevant post" + err});
+    }
+
+    const indexOfComment = postData.comments.indexOf(commentID);
+  
+    if (indexOfComment !== -1) {
+        postData.comments.splice(indexOfComment,1);
+    }
+
+    try{
+        handlers.post.update(postData.postID,{comments:postData.comments},async(err,updatedPost)=>{
+            if(!err && updatedPost){
+                await Comment.deleteOne({commentID}).then(deletedComment=>{
+                    return res.status(200).send({message:"Comment Deleted Successfully!"});
+                }).catch(e=>{
+                    return res.status(500).send({message:"An errorr occured while deleting your comment from database " + e});
+                });
+            }
+            else{
+                return res.status(500).send({message:err});
+            }
+        });
+    } catch(e){
+        res.status(500).send({message:e});
+    }
+}
+
 
 postController.userPosts = async(req,res)=>{
     try {
