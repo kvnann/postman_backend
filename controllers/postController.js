@@ -15,7 +15,7 @@ postController.create = async(req,res)=>{
     // }
 
     let {text} = req.body;
-    text = typeof(text) == 'string' && text.trim().length >= 0 && text.trim().length <= 5000 ? text.trim() : false;
+    text = typeof(text) == 'string' && text.trim().length >= 0 && text.trim().length <= 10000 ? text.trim() : false;
 
     if(!text || !req.user.userID){
         return res.status(500).send({message:"Missing field(s)"});
