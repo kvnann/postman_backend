@@ -15,7 +15,7 @@ postController.create = async(req,res)=>{
     // }
 
     let {text} = req.body;
-    text = typeof(text) == 'string' && text.trim().length >= 0 && text.trim().length <= 10000 ? text.trim() : false;
+    text = typeof(text) == 'string' && text.trim().length >= 0 && text.trim().length <= 20000 ? text.trim() : false;
 
     if(!text || !req.user.userID){
         return res.status(500).send({message:"Missing field(s)"});
@@ -193,6 +193,61 @@ postController.loadPosts = async(req,res)=>{
             errors[`${postID}`].message = "Couldn't find post";
         });
     });
+};
+
+postController.loadPostsLow = async(req,res)=>{
+    // const userID = req.user.userID;
+    const postsID = req.body.postsID;
+    if(postsID.length < 1){
+        return res.status(400).send({message:"Not a valid request"})
+    }
+    let part = req.body.part;
+    try{
+        part = parseInt(part,10)
+    }
+    catch(e){
+        return res.status(400).send({message:"Please provide a valid part number"});
+    }
+
+
+    if(part>postsID.length){
+        return res.status(400).send({message:"Can't load more posts"});
+    }
+
+    const postID = postsID[part-1]
+
+    let error = {};
+
+    if(!postsID || postsID?.length < 1){
+        return res.status(400).send({message:"Missing required fields"});
+    }
+    if(!postID){
+        return res.status(400).send({message:"Not a valid request"});
+    }
+        await Post.findOne({postID}).then(async(postData)=>{
+            if(!postData){
+                return res.status(500).send({message:"Couldn't find Post"});
+            }
+            try{
+                const userData = await User.findOne({userID:postData.user.userID});
+                if(!userData){
+                    return res.status(500).send({message:"Couldn't find user"});
+                }
+                delete userData.password;
+                userData.password = null;
+
+                postData.user = {
+                    userID:userData.userID,
+                    username:userData.username,
+                    profilePhoto: userData?.profilePhoto
+                }
+                return res.status(200).send({postData,error});
+            }catch(e){  
+                return res.status(500).send({message:e});
+            }
+        }).catch(e=>{
+            return res.status(500).send({message:e});
+        });
 };
 
 postController.loadComments = async(req,res)=>{

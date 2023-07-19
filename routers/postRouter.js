@@ -34,6 +34,9 @@ router.post('/get_posts',auth,postController.getPosts);
 // route for loading user's feed by request (3 posts being sent for each request)
 router.post('/load_posts',auth,postController.loadPosts);
 
+// In low data mode we get posts one by one because of large amount of reponses :(
+router.post('/load_posts_low',auth,postController.loadPostsLow);
+
 router.post('/load_comments',auth,postController.loadComments);
 
 router.post('/add_comment', auth, postController.addComment);
