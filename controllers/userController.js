@@ -145,7 +145,6 @@ userController.getOne = async(req,res)=>{
         }
         userData.password = null;
         delete userData.password;
-        userData.profilePhoto = userData?.profilePhoto.toString('base64');
         authUser = userData;
     }).catch(e=>{
         res.status(400).send({message:"Couldn't find user"});
@@ -158,7 +157,6 @@ userController.getOne = async(req,res)=>{
             }
             watchingUserData.password = null;
             delete watchingUserData.password;
-            watchingUserData.profilePhoto = watchingUserData?.profilePhoto.toString('base64');
             return res.status(200).send({
                 watchingUserData,
                 userData:authUser,
@@ -176,7 +174,6 @@ userController.getOne = async(req,res)=>{
             }
             watchingUserData.password = null;
             delete watchingUserData.password;
-            watchingUserData.profilePhoto = watchingUserData?.profilePhoto.toString('base64');
             return res.status(200).send({
                 watchingUserData,
                 userData:authUser,
